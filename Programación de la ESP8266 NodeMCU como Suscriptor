@@ -1,0 +1,184 @@
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+
+
+const char* ssid = "TIGO-23C5";  //Se guarda el nombre de la red en una constante.
+const char* password = "2D9557302950";    //Se guarda la contraseña de la red en una constante.
+const char* mqtt_server = "192.168.0.13"; //Se guarda la direccion IP del servidor en una constante.
+const byte intLED1 = 14;        //El puerto GPIO14 se guarda en una constante.
+const byte intLED2 = 12;        //El puerto GPIO12 se guarda en una constante.
+const byte intVentilador = 2;   //El puerto GPIO2 se guarda en una constante.
+const byte intFoco = 4;         //El puero GPIO4 se guarda en una constante.
+const byte intBuzzer = 13;      //El puero GPIO13 se guarda en una constante.
+const byte intLED3 = 5;         //El puero GPIO5 se guarda en una constante.
+const byte intLED4 = 0;         //El puero GPIO0 se guarda en una constante.
+
+WiFiClient espClient;               //Se establece que la ESP funcionara como suscriptor
+PubSubClient client(espClient);
+unsigned long lastMsg = 0;
+#define MSG_BUFFER_SIZE	(50)
+char msg[MSG_BUFFER_SIZE];
+int value = 0;
+
+void setup_wifi() {             // Se intenta realizar la conexión al wifi
+
+  delay(10);
+  
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  randomSeed(micros());               //Cuando se realiza la coneción al wifi se imprimen caracteres ramdom
+
+  Serial.println("");
+  Serial.println("WiFi connected");    
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {   //La funcion void callback sirve para poder leer los mensajes
+                                                                   //Publicados por el servidor en el topic
+  Serial.print("Mensaje Recibido [");             //Cada vez que se reciba un mensaje nuevo se imprimira las palabras
+  Serial.print(topic);                            //"Mensaje Recibido" y tambien se imprimira el mensaje del servidor (El topic)
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+   
+  if ((char)payload[0] == '1') {
+    digitalWrite(intLED1, HIGH);   // El GPIO14(IntLED1) entrara en estado alto si el mensaje recibido es "1"
+
+  } else {
+    if ((char)payload[0] == '0'){
+    digitalWrite(intLED1, LOW);  // Si el mensaje recibido es "0" en tonces la salida del GPIO14 sera estado bajo.
+  }
+  }
+
+  if ((char)payload[0] == '2') {   // El GPIO12(IntLED2) entrara en estado alto si el mensaje recibido es "2"
+    digitalWrite(intLED2, HIGH);   
+    
+    
+  } else {
+    if ((char)payload[0] == '3'){
+    digitalWrite(intLED2, LOW);    // Si el mensaje recibido es "3" en tonces la salida del GPIO12 sera estado bajo.
+  }
+  }
+  if ((char)payload[0] == '4') {
+    digitalWrite(intVentilador, HIGH);   // El GPIO2(IntVentilador) entrara en estado alto si el mensaje recibido es "4"
+    
+   
+  } else {
+    if ((char)payload[0] == '5'){
+    digitalWrite(intVentilador, LOW);  // Si el mensaje recibido es "5" en tonces la salida del GPIO2 sera estado bajo.
+  }
+  }
+  if ((char)payload[0] == '6') {
+    digitalWrite(intFoco, HIGH);      // El GPIO4(IntFoco) entrara en estado alto si el mensaje recibido es "6"
+    
+    
+  } else {
+    if ((char)payload[0] == '7'){
+    digitalWrite(intFoco, LOW);     // Si el mensaje recibido es "7" en tonces la salida del GPIO4 sera estado bajo.
+  }
+  }
+  if ((char)payload[0] == '8') {
+    digitalWrite(intBuzzer, HIGH);   // El GPIO13(IntBuzzer) entrara en estado alto si el mensaje recibido es "8"
+    
+    
+  } else {
+    if ((char)payload[0] == '9'){
+    digitalWrite(intBuzzer, LOW);   // Si el mensaje recibido es "9" en tonces la salida del GPIO13 sera estado bajo.
+  }
+  }
+  if ((char)payload[0] == 'A') {
+    digitalWrite(intLED3, HIGH);   // El GPIO5(IntLED3) entrara en estado alto si el mensaje recibido es "A"
+    
+    
+  } else {
+    if ((char)payload[0] == 'B'){
+    digitalWrite(intLED3, LOW);     // Si el mensaje recibido es "B" en tonces la salida del GPIO5 sera estado bajo.
+  }
+  }
+  if ((char)payload[0] == 'C') {
+    digitalWrite(intLED4, HIGH);   // El GPIO0(IntLED4) entrara en estado alto si el mensaje recibido es "C"
+    
+    
+  } else {
+    if ((char)payload[0] == 'D'){
+    digitalWrite(intLED4, LOW);     // Si el mensaje recibido es "D" en tonces la salida del GPIO0 sera estado bajo.
+  }
+  }  
+}
+
+void reconnect() {
+                                                       // en este bloque se vuelve a reconectar la ESP con el servidor
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Se crea un cliente random
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("Raspberry/Sensor/Sensor_2", "Sensor Temperatura");
+      // ... and resubscribe
+      client.subscribe("Raspberry/Luz/Luz_2");      //Aqui se establecen todos los topics a los que
+      client.subscribe("Raspberry/Luz/Luz_1");      //necesitamos suscribirnos.
+      client.subscribe("Raspberry/Luz/Ventilador");
+      client.subscribe("Raspberry/Luz/Foco");      
+      client.subscribe("Raspberry/Luz/Buzzer");
+      client.subscribe("Raspberry/Luz/LUZ_3");
+      client.subscribe("Raspberry/Luz/LUZ_4");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void setup() {
+  pinMode(intLED1, OUTPUT);         // El puerto GPIO14/D5 se establece como salida.
+  pinMode(intLED2, OUTPUT);         // El puerto GPIO12/D6 se establece como salida.
+  pinMode(intFoco, OUTPUT);         // El puerto GPIO4/D2 se establece como salida.
+  pinMode(intVentilador, OUTPUT);   // El puerto GPIO2/D4 se establece como salida.
+  pinMode(intBuzzer, OUTPUT);       // El puerto GPIO13/D7 se establece como salida.
+  pinMode(intLED3, OUTPUT);         // El puerto GPIO5/D1 se establece como salida.
+  pinMode(intLED4, OUTPUT);         // El puerto GPIO0/D3 se establece como salida.
+  Serial.begin(9600);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+}
+
+void loop() {
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  unsigned long now = millis();
+  if (now - lastMsg > 5000) {
+    lastMsg = now;
+    ++value;
+    snprintf (msg, MSG_BUFFER_SIZE, "Sensor Temperatura #%ld", value);
+    Serial.print("Publish message: ");
+    Serial.println(msg);
+    client.publish("Raspberry/Sensor/Sensor_2", msg);
+  }
+}
