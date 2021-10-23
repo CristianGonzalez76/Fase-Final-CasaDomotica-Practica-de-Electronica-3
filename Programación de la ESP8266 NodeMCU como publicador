@@ -1,0 +1,178 @@
+#define DEBUG_ALARMA
+ 
+//Librerías
+#include <ESP8266WiFi.h> 
+#include <PubSubClient.h>
+ 
+ 
+ 
+// Configuración WiFi
+char* ssid = "TIGO-23C5"; // En esta constante se guarda el nombre de la red a la que se quiere conectar.
+char* pass = "2D9557302950"; // En esta constante se guarda la constraseña para acceder.
+WiFiClient  clienteWifi;
+ 
+// Configuración MQTT
+PubSubClient clientMqtt(clienteWifi);
+const char* servidorMqtt = "192.168.0.13";   // En esta constante se guarda la IP del servidor, en mi caso la raspberry pi.
+const char* topicAlarma = "/casa/puerta/alarma"; // en estas constantes se establecen topics para cada sistema
+const char* topicTemp = "/casa/puerta/temp";     // para no tener que estar escribiendo la direccion de cada topic.
+const char* topicSeguridad = "/casa/puerta/buzzer" ;
+
+void setup() {
+ 
+#ifdef DEBUG_ALARMA
+  Serial.begin(9600); // se establece la velocidad a la que trabaja la ESP.
+  delay(500);
+  Serial.println("[INI]Comienzo del programa sistema alarma con ESP8266");
+ 
+  // Señal arrancando
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+  digitalWrite(LED_BUILTIN, HIGH);
+#endif
+ 
+  // Conexión con la red WiFi
+  int intentosWiFi = 0;  // Se usa esta variable para contar el numero de veces que se intenta conectar al wifi.
+                            //en caso de ser mas de una.
+  WiFi.begin(ssid, pass);
+ 
+#ifdef DEBUG_ALARMA
+    Serial.print("[WIFI]Intentando conectar a: ");
+    Serial.println(ssid);
+#endif
+ 
+  while (WiFi.status() != WL_CONNECTED || intentosWiFi > 30) { // se da la instrución de enviar una alarma
+                                                                  //forma de mensaje si no se conecta despues
+                                                                  // de 30 intentos
+#ifdef DEBUG_ALARMA
+    Serial.print(".");
+#endif
+ 
+    // Esperamos
+    delay(500);
+ 
+    intentosWiFi++;
+  }
+ 
+#ifdef DEBUG_ALARMA
+    Serial.println(".");
+#endif
+ 
+  // Si no ha conetado mostramos error
+ if (WiFi.status() != WL_CONNECTED)
+  {
+    while (1) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(500);
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(500);
+    }
+  }
+ 
+#ifdef DEBUG_ALARMA
+  Serial.println("[WIFI]Conectado a la WiFi"); //Cuando se establece la conexion con el wifi se imprime un mensaje.
+#endif
+ 
+  // Configuración MQTT
+  clientMqtt.setServer(servidorMqtt, 1883); // Se establece conexión con el servidor (la raspberry)
+#ifdef DEBUG_ALARMA
+  Serial.println("[MQTT]Conectado al servidor MQTT"); //Cuando se logra conectar imprime un mensaje;
+#endif
+ 
+  // Configuración de interrupciones
+  pinMode(2, INPUT_PULLUP); // Se establecio el puerto GPIO2 como entrada, (Este es el puerto D4 en la placa)
+  pinMode(4, INPUT);        // Se establecio el puerto GPIO4 como entrada, (Este es el puerto D2 en la placa)
+  pinMode(14, INPUT);       // Se establecio el puerto GPIO14 como entrada, (Este es el puerto D5 en la placa)
+ 
+  // Apagado de LED
+  digitalWrite(LED_BUILTIN, HIGH);
+}
+ 
+void loop()
+{
+  // Comprobamos conexión con broker MQTT
+  if (!clientMqtt.connected()) {
+    reconnectMqtt();
+  }
+  clientMqtt.loop();
+ 
+
+  if (digitalRead(2) == HIGH) {   // Se lee el estado del GPIO2 y se compara, si es Verdadero
+                                  // se publicara el mensaje "ON" en el topicAlarma
+
+    clientMqtt.publish(topicAlarma, "ON");
+ 
+#ifdef DEBUG_ALARMA
+    Serial.println("[MQTT]Publicando mensaje alarma: Luz encendida"); //Imprimimos este mensaje.
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(500);
+    digitalWrite(LED_BUILTIN, HIGH);
+#endif
+  } else if (digitalRead(2) == LOW){          //Se lee el estado del GPIO2 y se compara, si es Falso
+    clientMqtt.publish(topicAlarma, "OFF");   //se publicara "OFF en topicAlarma"
+    delay(500);
+    }
+
+  if (digitalRead(4) == HIGH) {     //Se lee el estado del GPIO4 y se compara, si es Verdadero
+                                    //se publica "Apagado"  en el topicTemp.
+    
+    clientMqtt.publish(topicTemp, "Apagado");
+ 
+#ifdef DEBUG_ALARMA
+    Serial.println("[MQTT]Publicando mensaje alarma: Ventilador encendido"); //Imprimimos este mensaje
+
+#endif
+  } else if (digitalRead(4) == LOW){              //Se lee el estado del GPIO4 y se compara, si es Falso
+    clientMqtt.publish(topicTemp, "Encendido");   //se publica "Encendido" en el topicTemp.
+    delay(500);
+    }
+
+  if (digitalRead(14) == HIGH) {                  //Se lee el estado del GPIO14 y se compara, si es Verdadero
+                                                  //se publica "Alarma" en el topicSeguridad.
+
+    clientMqtt.publish(topicSeguridad, "Alarma");
+ 
+#ifdef DEBUG_ALARMA
+    Serial.println("[MQTT]Publicando mensaje alarma: Puerta abierta"); //se imprime este mensaje.
+    
+#endif
+  } else if (digitalRead(14) == LOW){               //Se lee el estado del GPIO14 y se compara, si es Falso
+    clientMqtt.publish(topicSeguridad, "Normal");   //se publica "Normal" en el topicSeguridad.
+    delay(500);
+    }
+
+  
+}
+ 
+
+
+ 
+void reconnectMqtt() {
+  // Se repite hasta lograr conectar
+  while (!clientMqtt.connected()) {
+#ifdef DEBUG_ALARMA
+    Serial.println("[MQTT]Esperando conexión con MQTT...");
+#endif
+    // Se intenta conectar
+    if (clientMqtt.connect("ALARMA-PUERTA-MKR1000")) {
+#ifdef DEBUG_ALARMA
+      Serial.println("[MQTT]Conectado");
+#endif
+    } else {
+#ifdef DEBUG_ALARMA
+      Serial.print("[MQTT]Fallo, rc=");
+      Serial.print(clientMqtt.state());
+      Serial.println(" se intentará o travez tras 5 segundos");
+#endif
+      
+      delay(5000);
+    }
+  }
+}
